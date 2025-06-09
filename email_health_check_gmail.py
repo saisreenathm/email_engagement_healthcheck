@@ -10,7 +10,7 @@ from googleapiclient.errors import HttpError
 
 # Gmail API scope for read-only access
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
-# Gemini API endpoint and key (updated to match your curl request)
+# Gemini API endpoint and key
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 GEMINI_API_KEY = "AIzaSyASa_YIxIFx_3tIfQgKpEDefOagYO_b8VE"  # Your confirmed API key
 
@@ -39,65 +39,71 @@ def authenticate_gmail():
             token.write(creds.to_json())
     return build('gmail', 'v1', credentials=creds)
 
-def get_email_thread(service, user_id='me', thread_id=None):
-    """Fetch an email thread by ID or list recent threads to select one."""
+def get_promotional_threads(service, user_id='me', max_threads=5):
+    """Fetch up to five email threads labeled as Promotions."""
     try:
-        if not thread_id:
-            results = service.users().threads().list(userId=user_id, maxResults=1).execute()
-            threads = results.get('threads', [])
-            if not threads:
-                print("No threads found.")
-                return None
-            thread_id = threads[0]['id']
-            print(f"Using thread ID: {thread_id}")
+        # List threads with PROMOTIONS label
+        results = service.users().threads().list(userId=user_id, labelIds=['CATEGORY_PROMOTIONS'], maxResults=max_threads).execute()
+        threads = results.get('threads', [])
         
-        thread = service.users().threads().get(userId=user_id, id=thread_id).execute()
-        messages = thread.get('messages', [])
+        if not threads:
+            print("No promotional threads found.")
+            return []
         
-        email_data = []
-        for message in messages:
-            headers = message['payload']['headers']
-            email_info = {
-                'from': '',
-                'to': '',
-                'subject': '',
-                'body': '',
-                'timestamp': ''
-            }
-            for header in headers:
-                if header['name'].lower() == 'from':
-                    email_info['from'] = header['value']
-                if header['name'].lower() == 'to':
-                    email_info['to'] = header['value']
-                if header['name'].lower() == 'subject':
-                    email_info['subject'] = header['value']
-                if header['name'].lower() == 'date':
-                    email_info['timestamp'] = header['value']
+        # Fetch details for each thread
+        thread_data = []
+        for thread in threads:
+            thread_id = thread['id']
+            print(f"Fetching thread ID: {thread_id}")
+            thread = service.users().threads().get(userId=user_id, id=thread_id).execute()
+            messages = thread.get('messages', [])
             
-            try:
-                if 'parts' in message['payload']:
-                    for part in message['payload']['parts']:
-                        if part['mimeType'] == 'text/plain':
-                            body_data = part['body'].get('data', '')
-                            if body_data:
-                                email_info['body'] = base64.urlsafe_b64decode(body_data).decode('utf-8')
-                                break
-                else:
-                    body_data = message['payload']['body'].get('data', '')
-                    if body_data:
-                        email_info['body'] = base64.urlsafe_b64decode(body_data).decode('utf-8')
-            except Exception as e:
-                print(f"Error decoding body: {e}")
-                email_info['body'] = 'Unable to decode message body.'
+            email_data = []
+            for message in messages:
+                headers = message['payload']['headers']
+                email_info = {
+                    'from': '',
+                    'to': '',
+                    'subject': '',
+                    'body': '',
+                    'timestamp': ''
+                }
+                for header in headers:
+                    if header['name'].lower() == 'from':
+                        email_info['from'] = header['value']
+                    if header['name'].lower() == 'to':
+                        email_info['to'] = header['value']
+                    if header['name'].lower() == 'subject':
+                        email_info['subject'] = header['value']
+                    if header['name'].lower() == 'date':
+                        email_info['timestamp'] = header['value']
+                
+                try:
+                    if 'parts' in message['payload']:
+                        for part in message['payload']['parts']:
+                            if part['mimeType'] == 'text/plain':
+                                body_data = part['body'].get('data', '')
+                                if body_data:
+                                    email_info['body'] = base64.urlsafe_b64decode(body_data).decode('utf-8')
+                                    break
+                    else:
+                        body_data = message['payload']['body'].get('data', '')
+                        if body_data:
+                            email_info['body'] = base64.urlsafe_b64decode(body_data).decode('utf-8')
+                except Exception as e:
+                    print(f"Error decoding body for thread {thread_id}: {e}")
+                    email_info['body'] = 'Unable to decode message body.'
+                
+                email_data.append(email_info)
             
-            email_data.append(email_info)
+            thread_data.append({'thread_id': thread_id, 'emails': email_data})
         
-        return email_data
+        return thread_data
     except HttpError as error:
         print(f"An error occurred: {error}")
         if error.resp.status == 403:
             print("Access denied. Ensure mrhappy6600@gmail.com is a test user.")
-        return None
+        return []
 
 def prepare_gemini_payload(email_thread):
     """Prepare payload for Gemini API from email thread."""
@@ -135,12 +141,10 @@ def call_gemini_api(payload):
         response.raise_for_status()
         result = response.json()
         print("Raw Gemini API Response:", json.dumps(result, indent=2))  # Debug output
-        # Extract text from response
         generated_text = result.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "{}")
-        # Clean up response if it includes code block markers
         if generated_text.startswith("```json\n") and generated_text.endswith("\n```"):
             generated_text = generated_text[8:-4]
-        return json.loads(generated_text)  # Parse as JSON
+        return json.loads(generated_text)
     except requests.RequestException as e:
         print(f"Gemini API call failed: {e}")
         if hasattr(e, 'response') and e.response:
@@ -165,27 +169,31 @@ def main():
         # Authenticate with Gmail API
         service = authenticate_gmail()
         
-        # Fetch a thread
-        thread_id = None  # Replace with specific thread ID if known
-        email_thread = get_email_thread(service, thread_id=thread_id)
+        # Fetch up to five promotional threads
+        threads = get_promotional_threads(service, max_threads=5)
         
-        if not email_thread:
-            print("Failed to fetch email thread.")
+        if not threads:
+            print("No promotional threads to analyze.")
             return
         
-        # Print fetched thread for reference
-        print("Fetched Email Thread:")
-        print(json.dumps(email_thread, indent=2))
-        
-        # Prepare Gemini API payload
-        payload = prepare_gemini_payload(email_thread)
-        
-        # Send to Gemini API
-        gemini_result = call_gemini_api(payload)
-        
-        # Print results
-        print("Gemini API Classification:")
-        print(json.dumps(gemini_result, indent=2))
+        # Analyze each thread with Gemini
+        for thread in threads:
+            thread_id = thread['thread_id']
+            email_thread = thread['emails']
+            
+            print(f"\nAnalyzing Thread ID: {thread_id}")
+            print("Thread Details:")
+            print(json.dumps(email_thread, indent=2))
+            
+            # Prepare Gemini API payload
+            payload = prepare_gemini_payload(email_thread)
+            
+            # Send to Gemini API
+            gemini_result = call_gemini_api(payload)
+            
+            # Print results
+            print("Gemini API Classification:")
+            print(json.dumps(gemini_result, indent=2))
         
     except Exception as e:
         print(f"Main error: {e}")
