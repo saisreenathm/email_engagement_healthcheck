@@ -11,7 +11,7 @@ from googleapiclient.errors import HttpError
 # Gmail API scope for read-only access
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 # Gemini API endpoint and key (replace with your actual key)
-GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
 GEMINI_API_KEY = "your_gemini_api_key"  # Replace with your actual key
 
 def authenticate_gmail():
@@ -101,14 +101,12 @@ def get_email_thread(service, user_id='me', thread_id=None):
 
 def prepare_gemini_payload(email_thread):
     """Prepare payload for Gemini API from email thread."""
-    # Combine email bodies into a single text for analysis
     combined_text = "\n".join([f"From: {email['from']}\nSubject: {email['subject']}\nBody: {email['body']}\n" for email in email_thread])
     
-    # Create prompt for Gemini API
     prompt = f"""Analyze the following email thread and provide a JSON object with:
-    - Engagement Score: 'High' (3+ replies), 'Medium' (1-2 replies), or 'Low' (0 replies)
-    - Sentiment: 'Positive', 'Neutral', or 'Negative' based on the tone
-    - Risk Alerts: List of issues like 'Customer sounds unhappy' or 'Multiple follow-ups ignored'
+    - engagement_score: 'High' (3+ replies), 'Medium' (1-2 replies), or 'Low' (0 replies)
+    - sentiment: 'Positive', 'Neutral', or 'Negative' based on the tone
+    - risk_alerts: List of issues like 'Customer sounds unhappy' or 'Multiple follow-ups ignored'
     Thread:
     {combined_text}
     Return only the JSON object."""
@@ -136,11 +134,18 @@ def call_gemini_api(payload):
         response = requests.post(url, json=payload, headers=headers)
         response.raise_for_status()
         result = response.json()
-        # Extract the JSON object from the response (adjust based on actual Gemini response format)
+        print("Raw Gemini API Response:", json.dumps(result, indent=2))  # Debug output
+        # Extract text from response
         generated_text = result.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "{}")
-        return json.loads(generated_text)  # Assuming Gemini returns JSON string
+        # Clean up response if it includes code block markers
+        if generated_text.startswith("```json\n") and generated_text.endswith("\n```"):
+            generated_text = generated_text[8:-4]
+        return json.loads(generated_text)  # Parse as JSON
     except requests.RequestException as e:
         print(f"Gemini API call failed: {e}")
+        if hasattr(e, 'response') and e.response:
+            print(f"Status Code: {e.response.status_code}")
+            print(f"Error Details: {e.response.text}")
         return {
             "engagement_score": "Unknown",
             "sentiment": "Unknown",
@@ -148,6 +153,7 @@ def call_gemini_api(payload):
         }
     except json.JSONDecodeError as e:
         print(f"Failed to parse Gemini response as JSON: {e}")
+        print(f"Raw response text: {generated_text}")
         return {
             "engagement_score": "Unknown",
             "sentiment": "Unknown",
@@ -166,6 +172,10 @@ def main():
         if not email_thread:
             print("Failed to fetch email thread.")
             return
+        
+        # Print fetched thread for reference
+        print("Fetched Email Thread:")
+        print(json.dumps(email_thread, indent=2))
         
         # Prepare Gemini API payload
         payload = prepare_gemini_payload(email_thread)
