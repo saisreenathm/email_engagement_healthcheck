@@ -118,7 +118,7 @@ def get_promotional_threads(service, user_id='me', max_threads=5):
 
 def prepare_gemini_payload(email_thread):
     """Prepare payload for Gemini API from email thread."""
-    combined_text = "\n".join([f"From: {email['from']}\nSubject: {email['subject']}\nBody: {email各界['body']}\n" for email in email_thread])
+    combined_text = "\n".join([f"From: {email['from']}\nSubject: {email['subject']}\nBody: {email['body']}\n" for email in email_thread])
     
     prompt = f"""Analyze the following email thread and provide a JSON object with:
     - engagement_score: 'High' (3+ replies), 'Medium' (1-2 replies), or 'Low' (0 replies)
