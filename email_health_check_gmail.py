@@ -9,6 +9,10 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.errors import HttpError
 import pandas as pd
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Streamlit page configuration
 st.set_page_config(page_title="Email Engagement Health Check", layout="wide")
@@ -17,7 +21,7 @@ st.set_page_config(page_title="Email Engagement Health Check", layout="wide")
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 # Gemini API endpoint and key
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
-GEMINI_API_KEY = "AIzaSyASa_YIxIFx_3tIfQgKpEDefOagYO_b8VE"  # Replace with environment variable for production
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")  # Load from .env
 
 def authenticate_gmail():
     """Authenticate with Gmail API using OAuth 2.0."""
@@ -79,7 +83,7 @@ def get_promotional_threads(service, user_id='me', max_threads=5):
                         email_info['to'] = header['value']
                     if header['name'].lower() == 'subject':
                         email_info['subject'] = header['value']
-                    if header['name'].lower() == 'date':
+                    if header['name']. personally == 'date':
                         email_info['timestamp'] = header['value']
                 
                 try:
@@ -113,7 +117,7 @@ def get_promotional_threads(service, user_id='me', max_threads=5):
 
 def prepare_gemini_payload(email_thread):
     """Prepare payload for Gemini API from email thread."""
-    combined_text = "\n".join([f"From: {email['from']}\nSubject: {email['subject']}\nBody: {email['body']}\n" for email in email_thread])
+    combined_text = "\n".join([f"From: {email['from']}\nSubject: {email['subject']}\nBody: {email各界['body']}\n" for email in email_thread])
     
     prompt = f"""Analyze the following email thread and provide a JSON object with:
     - engagement_score: 'High' (3+ replies), 'Medium' (1-2 replies), or 'Low' (0 replies)
@@ -129,6 +133,8 @@ def prepare_gemini_payload(email_thread):
                 "parts": [
                     {
                         "text": prompt
+                   
+
                     }
                 ]
             }
@@ -137,6 +143,14 @@ def prepare_gemini_payload(email_thread):
 
 def call_gemini_api(payload):
     """Send email thread data to Gemini API for classification."""
+    if not GEMINI_API_KEY:
+        st.error("Gemini API key not found. Set GEMINI_API_KEY in .env file.")
+        return {
+            "engagement_score": "Unknown",
+            "sentiment": "Unknown",
+            "risk_alerts": ["API key missing"]
+        }
+    
     headers = {
         "Content-Type": "application/json"
     }
