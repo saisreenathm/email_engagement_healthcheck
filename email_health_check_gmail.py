@@ -10,9 +10,9 @@ from googleapiclient.errors import HttpError
 
 # Gmail API scope for read-only access
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
-# Gemini API endpoint and key (replace with your actual key)
-GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
-GEMINI_API_KEY = "your_gemini_api_key"  # Replace with your actual key
+# Gemini API endpoint and key (updated to match your curl request)
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+GEMINI_API_KEY = "AIzaSyASa_YIxIFx_3tIfQgKpEDefOagYO_b8VE"  # Your confirmed API key
 
 def authenticate_gmail():
     """Authenticate with Gmail API using OAuth 2.0."""
