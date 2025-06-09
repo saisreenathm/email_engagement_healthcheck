@@ -19,6 +19,7 @@ st.set_page_config(page_title="Email Engagement Health Check", layout="wide")
 
 # Gmail API scope for read-only access
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+
 # Gemini API endpoint and key
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")  # Load from .env
